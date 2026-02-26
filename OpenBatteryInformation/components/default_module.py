@@ -1,17 +1,31 @@
-import tkinter as tk
+import os
 
-class DefaultModule(tk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.parent = parent
-        self.create_widgets()
+class DefaultModule:
+    """
+    The Base Module for all battery types. 
+    Specific modules (like Makita) will inherit from this.
+    """
+    def __init__(self):
+        self.name = "Default Module"
+        self.description = "Select a module to begin diagnostics."
+        # This dictionary will store the live data
+        self.data_points = {
+            "Status": "Idle",
+            "Voltage": "0.00 V",
+            "Capacity": "0 %"
+        }
 
-    def create_widgets(self):
-        label = tk.Label(self, text="Open Battery Information", font=('Helvetica', 16))
-        label.pack(pady=20)
+    def get_info_text(self):
+        return "This is the base module. Please select a specific battery type."
 
-        message = tk.Label(self, text="Select a module from the sidebar to display its content.")
-        message.pack(pady=10)
+    def get_parameters(self):
+        """Returns the list of parameters this module supports."""
+        return self.data_points.keys()
 
-        info = tk.Label(self, text="This is the default module content.")
-        info.pack(pady=10)
+    def update_data(self, serial_connection):
+        """
+        Logic for reading data from the Arduino. 
+        Specific battery modules will override this method.
+        """
+        # Placeholder for simulation
+        pass

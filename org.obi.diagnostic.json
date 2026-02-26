@@ -1,0 +1,47 @@
+{
+    "app-id": "org.obi.diagnostic",
+    "runtime": "org.gnome.Platform",
+    "runtime-version": "45",
+    "sdk": "org.gnome.Sdk",
+    "command": "obi-app",
+    "finish-args": [
+        "--share=ipc",
+        "--socket=fallback-x11",
+        "--socket=wayland",
+        "--device=all",
+        "--share=network"
+    ],
+    "modules": [
+        {
+            "name": "python3-pyserial",
+            "buildsystem": "simple",
+            "build-commands": [
+                "pip3 install --prefix=/app --no-index --find-links=. pyserial"
+            ],
+            "sources": [
+                {
+                    "type": "file",
+                    "path": "vendor/pyserial-3.5-py2.py3-none-any.whl"
+                }
+            ]
+        },
+        {
+            "name": "obi-app",
+            "buildsystem": "simple",
+            "build-commands": [
+                "install -D OpenBatteryInformation/main.py /app/bin/obi-app",
+                "chmod +x /app/bin/obi-app",
+                "cp -rn OpenBatteryInformation/modules /app/bin/",
+                "cp -rn OpenBatteryInformation/interfaces /app/bin/",
+                /* Explicit paths from the root of the source directory */
+                "install -D org.obi.diagnostic.desktop /app/share/applications/org.obi.diagnostic.desktop",
+                "install -D org.obi.diagnostic.png /app/share/icons/hicolor/512x512/apps/org.obi.diagnostic.png"
+            ],
+            "sources": [
+                { "type": "dir", "path": "." }
+            ]
+        }
+    ]
+}
+
+

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Open Battery Info
+Comment=Monitor your battery health and status
+Exec=obi-launcher
+Icon=/app/share/pixmaps/com.openbatteryinformation.Obi.png
+Terminal=false
+Categories=Utility;System;

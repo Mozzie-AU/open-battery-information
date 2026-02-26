@@ -1,0 +1,29 @@
+Release: OBI-1 Diagnostic v1.0.0 (Flatpak Edition)
+
+I am excited to announce the first official release of the OBI-1 Diagnostic Tool. This project has undergone a complete architectural rewrite to provide a modern, secure, and user-friendly experience on Linux systems.
+🚀 What's New
+
+    Modern GTK4 / Libadwaita UI: The application now features a native Linux interface with a clean, responsive design.
+
+    Integrated Window Controls: Added a standard HeaderBar to support minimize, maximize, and close operations across all window managers.
+
+    Flatpak Sandboxing: Now distributed as a Flatpak, ensuring the app runs consistently across different Linux distributions without dependency "hell."
+
+    Real-time Safety Monitoring:
+
+        Low Voltage Alerts: Cell voltages below 2.5V are automatically highlighted in Red.
+
+        Thermal Protection: Battery temperatures at or above 60°C are flagged in Red to prevent damage.
+
+    Automated Hardware Access: Includes a new setup-permissions.sh script to automate the configuration of udev rules for serial communication.
+
+⚖️ Licensing & Acknowledgments
+
+This release marks the transition to the GNU GPLv3 license to ensure the tool remains open and free for the community. This work is a specialized fork of the Open Battery Information project by Martin Jansson. We have maintained the original MIT license notices while building out this new Linux-centric ecosystem.
+🛠 Installation
+
+    Download the org.obi.diagnostic.flatpak bundle.
+
+    Run sudo ./setup-permissions.sh to configure your USB-to-Serial adapter.
+
+    Install via: flatpak install --user org.obi.diagnostic.flatpak

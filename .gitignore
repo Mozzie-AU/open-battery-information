@@ -1,4 +1,16 @@
-__pycache__
-build*
-dist*
-.venv*
+# Flatpak artifacts
+build-dir/
+.flatpak-builder/
+repo/
+*.flatpak
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# System and IDE files
+.DS_Store
+.vscode/
+.idea/

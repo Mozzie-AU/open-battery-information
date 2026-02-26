@@ -1,71 +1,88 @@
-# Open Battery Information
 
-This project aims to provide tools and information about various batteries in order to aid repair. 
-It is very common for manufacturers to lock the BMS when a fault is detected to protect the device and the user. Very important feature!
-So when is it a problem? Well, there is always a chance for false triggering of this protection, or the fault could have been temporary or even repaired. 
-In this case it would be wasteful to throw out a perfectly good BMS just because its software says it is faulty.
+# OBI-1 Diagnostic (Flatpak Edition)
 
-This is the problem we would like to solve!
+**OBI-1** is an advanced, Linux-optimized diagnostic tool for lithium-ion battery packs, primarily targeting Makita LXT systems. This version is anevolution of the original project, rebuilt for recent Linux environments with enhanced safety monitoring.
 
-![screenshot](docs/images/obi-1.png)
+## ⚖️ License & Acknowledgments
 
-## Contact information
+* **Current License**: This software is licensed under the **GNU GPLv3**.
+* **Origin**: This project is a specialized fork of **Open Battery Information** by **Martin Jansson**.
+* **Compliance**: We retain the original MIT license notice for the foundation code while applying GPLv3 protections to all new modifications and the combined work.
 
-For any questions, please e-mail: openbatteryinformation@gmail.com
+## 🛠 Enhancements in this Fork
 
-## Support
+Unlike the original Python script approach, this version introduces:
 
-I have spent alot of time on this project and now releasing all this information to the public in hope that it will help other people save batteries and money. If you would like to show some appreciation for my work, please consider supporting me by buying me a coffee or sponsor me on Github!
-
-[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mnhjansson)
----
-
-# Instructions
-
-## Step 1: Set Up ArduinoOBI
-
-  1. Navigate to the ArduinoOBI folder in the project directory.
-  2. Follow the instructions in the README.md. This section will guide you through configuring the Arduino part of the system, ensuring everything is set up correctly.
-
-## Step 2: Set Up OpenBatteryInformation
-
-After setting up the Arduino part, you have two options for setting up the software on your computer.
-
-### Option 1: Use Precompiled Binary for Windows
-
-If you prefer not to deal with Python dependencies, you can download a precompiled binary for Windows:
-
-  1. Navigate to the [Releases](https://github.com/mnh-jansson/open-battery-information/releases) section of the repository.
-  2. Download the Windows precompiled binary for your system.
-  3. Simply run the executable and follow any on-screen instructions to use the software.
-
-### Option 2: Install Python Requirements - Clone the Repository and Install Dependencies
-
-  Clone the repository to your local machine:
-```bash
-git clone https://github.com/mnh-jansson/open-battery-information
-```
-Navigate into the project folder:
-```bash
-cd OpenBatteryInformation
-```
-Install the required Python dependencies:
-
-If you don't have pip installed, follow the installation guide for your platform here.
-Install the required libraries by running:
-```bash
-pip install -r requirements.txt
-```
-You should now be ready to run OpenBatteryInformation!
-
-
-## Step 3: Run OpenBatteryInformation
-
-  If you installed the Python version, you can run the program by executing:
-```bash
-python main.py
-```
-If you're using the Windows binary, simply double-click the downloaded OBI.exe file to start the application.
+* **Revised UI**: A complete rewrite using **GTK4 and Libadwaita** for a native GNOME/Linux look, featuring a centered HeaderBar with integrated window controls.
+* **Automated Permissions**: A custom `setup-permissions.sh` script to handle serial port access without manual user group management.
+* **Flatpak Distribution**: Fully sandboxed packaging for security and cross-distribution compatibility.
+* **Visual Safety Alerts**: Real-time color coding for low-voltage cells (< 2.5V) and high-temperature warnings (≥ 60°C).
 
 ---
+
+## 🚀 Installation (Linux)
+
+### 1. Configure Hardware Access
+
+By default, Linux restricts access to the serial ports used by your Arduino interface. Run the included setup script to apply the necessary udev rules:
+
+```bash
+chmod +x setup-permissions.sh
+sudo ./setup-permissions.sh
+
+```
+
+*Note: You may need to unplug and replug your USB adapter after running this.*
+
+### 2. Install the App
+
+Download the `org.obi.diagnostic.flatpak` file from the [Releases](https://www.google.com/search?q=../../releases) section and run:
+
+```bash
+flatpak install --user org.obi.diagnostic.flatpak
+
+```
+
+### 3. Launch
+
+Find **OBI-1 Diagnostic** in your application menu or launch via terminal:
+
+```bash
+flatpak run org.obi.diagnostic
+
+```
+
+---
+
+## 💻 Development & Building
+
+To modify the source or build the package manually, ensure you have `flatpak-builder` installed.
+
+1. **Build and Install Locally**:
+```bash
+flatpak-builder --user --install --force-clean build-dir org.obi.diagnostic.json
+
+```
+
+
+2. **Create a Redistributable Bundle**:
+```bash
+flatpak-builder --repo=repo --force-clean build-dir org.obi.diagnostic.json
+flatpak build-bundle ./repo org.obi.diagnostic.flatpak org.obi.diagnostic
+
+```
+
+
+
+---
+
+## 🤝 Support & Contributions
+
+This project aims to aid in battery repair and reduce waste by identifying false BMS triggers.
+
+* For questions regarding the original logic, visit the [original repository](https://github.com/mnh-jansson/open-battery-information).
+* To support the original author, consider [Buying them a coffee](https://www.buymeacoffee.com/mnhjansson).
+
+---
+
 

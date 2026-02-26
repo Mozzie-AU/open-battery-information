@@ -1,186 +1,234 @@
+#!/usr/bin/env python3
+# OBI-1 Diagnostic Tool
+# Copyright (C) 2026 Ray Ellison
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# Portions Derived from "Open Battery Information" 
+# Copyright (c) 2024 Martin Jansson (MIT License)
+
+import gi
 import os
 import sys
-import tkinter as tk
-from tkinter import ttk
-import importlib.util
-import pkgutil
-from components.default_module import DefaultModule
+import threading
+import re
 
-class OBI(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("OBI-1")
-        self.geometry("1270x720")
-        self.set_icon("icon.png")
+# 1. FIX PATHS
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
-        self.main_app = None
-        self.loaded_modules = {}
-        self.loaded_interfaces = {}
-        self.module_names = {}
-        self.interface_names = {} 
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Gtk, Adw, GLib, Gdk
 
-        self.setup_sidebar()
-        self.setup_main_window()
-        self.setup_debug_frame()
+# 2. ROBUST IMPORTS
+try:
+    from interfaces.arduino_obi import SerialInterface
+    from modules.makita_lxt import MakitaModule
+    print("Modules loaded successfully.")
+except ImportError as e:
+    print(f"IMPORT ERROR: {e}")
+    sys.exit(1)
 
-        self.default_module = DefaultModule(self.main_window)
-        self.display_default_content()
+class ObiApp(Adw.Application):
+    def __init__(self, **kwargs):
+        super().__init__(application_id="org.obi.diagnostic.v1", **kwargs)
+        self.comm = None
+        self.makita = None
 
-        self.current_interface = None
+    def do_activate(self):
+        self.win = Adw.ApplicationWindow(application=self)
+        self.win.set_default_size(1100, 950)
 
-    def set_icon(self, icon_path):
-        if hasattr(sys, '_MEIPASS'):
-            # When running from a PyInstaller bundle
-            icon_path = os.path.join(sys._MEIPASS, icon_path)
+        # Backend Init
+        if self.comm is None:
+            self.comm = SerialInterface(debug_callback=self.update_debug)
+            self.makita = MakitaModule(self.comm)
 
-        icon = tk.PhotoImage(file=icon_path)
-        self.iconphoto(False, icon)
+        # --- NEW TOP-LEVEL LAYOUT ---
+        outer_storage = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        
+        # HeaderBar with Centered Title
+        header_bar = Adw.HeaderBar()
+        title_widget = Adw.WindowTitle(title="OBI-1: Makita LXT Diagnostic")
+        header_bar.set_title_widget(title_widget)
+        outer_storage.append(header_bar)
 
-    def setup_sidebar(self):
-        self.sidebar = tk.LabelFrame(self, text="Settings", width=200, padx=10, pady=10)
-        self.sidebar.pack(fill='y', side='left')
+        # Main Layout Box
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        outer_storage.append(main_box)
+        
+        # Sidebar
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        sidebar.set_margin_top(16)
+        sidebar.set_margin_bottom(16)
+        sidebar.set_margin_start(16)
+        sidebar.set_margin_end(16)
+        sidebar.set_size_request(280, -1)
+        
+        sidebar.append(Gtk.Label(label="Connection", xalign=0))
+        
+        raw_ports = self.comm.get_available_ports() or []
+        sorted_ports = sorted(raw_ports, reverse=True) 
+        display_ports = sorted_ports if sorted_ports else ["No Ports Found"]
+        
+        self.port_dropdown = Gtk.DropDown.new_from_strings(display_ports)
+        sidebar.append(self.port_dropdown)
 
-        self.setup_module_frame()
-        self.setup_interface_frame()
+        self.btn_connect = Gtk.Button(label="Connect")
+        self.btn_connect.add_css_class("suggested-action")
+        self.btn_connect.connect("clicked", self.on_connect_toggle)
+        sidebar.append(self.btn_connect)
+        main_box.append(sidebar)
 
-    def setup_module_frame(self):
-        module_frame = tk.LabelFrame(self.sidebar, text="Module Selection", padx=10, pady=10)
-        module_frame.pack(fill='both', pady=10)
+        # Content Area
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20, hexpand=True)
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(20)
+        content.set_margin_end(20)
 
-        self.module_var = tk.StringVar()
-        self.module_combobox = ttk.Combobox(module_frame, textvariable=self.module_var, width=20)
-        self.module_combobox.pack(fill='both', pady=10)
+        # Buttons Grid (3 Columns)
+        btn_grid = Gtk.Grid(column_spacing=12, row_spacing=12, halign=Gtk.Align.CENTER)
+        
+        self.btn_read_static = Gtk.Button(label="Read Model")
+        self.btn_read_static.connect("clicked", lambda x: self.run_async(self.do_read_static))
+        
+        self.btn_read_live = Gtk.Button(label="Read Live")
+        self.btn_read_live.connect("clicked", lambda x: self.run_async(self.do_read_live))
 
-        self.load_modules()
-        self.module_combobox.bind("<<ComboboxSelected>>", self.display_module)
+        self.btn_led_on = Gtk.Button(label="LEDs ON")
+        self.btn_led_on.connect("clicked", lambda x: self.run_async(lambda: self.makita.set_leds(True)))
 
-    def setup_interface_frame(self):
-        interface_frame = tk.LabelFrame(self.sidebar, text="Select Interface:", padx=10, pady=10)
-        interface_frame.pack(pady=10)
+        self.btn_led_off = Gtk.Button(label="LEDs OFF")
+        self.btn_led_off.connect("clicked", lambda x: self.run_async(lambda: self.makita.set_leds(False)))
+        
+        self.btn_clear_errors = Gtk.Button(label="Clear Battery Errors")
+        self.btn_clear_errors.add_css_class("destructive-action") 
+        self.btn_clear_errors.connect("clicked", self.on_clear_clicked)
 
-        self.interface_var = tk.StringVar()
-        self.interface_combobox = ttk.Combobox(interface_frame, textvariable=self.interface_var, width=25)
-        self.interface_combobox.pack(pady=10)
+        btn_grid.attach(self.btn_read_static, 0, 0, 1, 1)
+        btn_grid.attach(self.btn_read_live, 1, 0, 1, 1)
+        btn_grid.attach(self.btn_led_on, 2, 0, 1, 1)
+        btn_grid.attach(self.btn_clear_errors, 0, 1, 2, 1)
+        btn_grid.attach(self.btn_led_off, 2, 1, 1, 1)
+        
+        content.append(btn_grid)
 
-        self.load_interfaces()
-        self.interface_combobox.bind("<<ComboboxSelected>>", self.display_interface_settings)
+        # Data Display List
+        self.data_list = Gtk.ListBox()
+        self.data_list.add_css_class("boxed-list")
+        self.data_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.rows = {} 
+        params = ["Model", "ROM ID", "Charge count", "State", "Pack Voltage", 
+                  "Cell 1", "Cell 2", "Cell 3", "Cell 4", "Cell 5", "Temp Cell"]
+        for p in params:
+            row = Adw.ActionRow(title=p)
+            row.set_subtitle("---")
+            self.data_list.append(row)
+            self.rows[p] = row
 
-        self.interface_wireframe = tk.Frame(interface_frame, padx=10, pady=10)
-        self.interface_wireframe.pack(fill='both', expand=True, pady=(20, 0))
+        scroll = Gtk.ScrolledWindow(min_content_height=400, vexpand=True)
+        scroll.set_child(self.data_list)
+        content.append(scroll)
 
-    def setup_main_window(self):
-        self.main_window = tk.Frame(self, padx=20, pady=20)
-        self.main_window.pack(fill='both', expand=True, side='top')
+        # Log View
+        debug_frame = Gtk.Frame(label="Serial Communication Log")
+        self.debug_buffer = Gtk.TextBuffer()
+        self.debug_view = Gtk.TextView(buffer=self.debug_buffer, editable=False)
+        log_scroll = Gtk.ScrolledWindow(min_content_height=180, vexpand=False)
+        log_scroll.set_child(self.debug_view)
+        debug_frame.set_child(log_scroll)
+        content.append(debug_frame)
 
-    def setup_debug_frame(self):
-        debug_frame = tk.LabelFrame(self, text="Debug Information", padx=20, pady=20)
-        debug_frame.pack(fill='both', expand=False, side='top', padx=5, pady=5)
+        main_box.append(content)
+        
+        self.win.set_content(outer_storage)
+        self.win.present()
 
-        self.debug_text = tk.Text(debug_frame, height=5, wrap='word')
-        self.debug_text.pack(fill='both', expand=True)
-        self.debug_text.config(state='disabled')
+    def update_ui_rows(self, data_dict):
+        for key, value in data_dict.items():
+            if key in self.rows:
+                color = "#3584e4"  # Default Blue
+                
+                # 1. Check for low voltage on Cells (< 2.5V)
+                if key.startswith("Cell"):
+                    try:
+                        # Extract numeric value (e.g., "2.4V" -> 2.4)
+                        num_val = float(re.findall(r"\d+\.\d+", str(value))[0])
+                        if num_val < 2.5:
+                            color = "#e01b24"  # Adwaita Red
+                    except (ValueError, IndexError):
+                        pass
+                
+                # 2. Check for high temperature (> 60°C)
+                elif key == "Temp Cell":
+                    try:
+                        # Extract numeric value (e.g., "62C" -> 62)
+                        temp_val = float(re.findall(r"\d+", str(value))[0])
+                        if temp_val >= 60:
+                            color = "#e01b24"  # Adwaita Red
+                    except (ValueError, IndexError):
+                        pass
 
-    def get_resource_path(self, relative_path):
-        """ Get the absolute path to the resource, works for dev and for PyInstaller """
-        if hasattr(sys, '_MEIPASS'):
-            return os.path.join(sys._MEIPASS, relative_path)
-        return os.path.join(os.path.abspath("."), relative_path)
+                markup = f"<span weight='heavy' size='large' color='{color}'>{value}</span>"
+                self.rows[key].set_subtitle(markup)
+                self.rows[key].set_use_markup(True)
 
-    def load_modules(self):
-        modules_dir = self.get_resource_path('modules')
-        module_names = sorted({name for _, name, _ in pkgutil.iter_modules([modules_dir])})
-
-        display_names = []
-        for module_name in module_names:
-            try:
-                module = self.import_module(f"modules.{module_name}")
-                display_name = module.get_display_name()
-                self.module_names[display_name] = module_name
-                display_names.append(display_name)
-            except Exception as e:
-                self.update_debug(f"Failed to load module '{module_name}': {e}")
-
-        self.module_combobox['values'] = display_names
-
-    def load_interfaces(self):
-        interfaces_dir = self.get_resource_path('interfaces')
-        interface_names = sorted({name for _, name, _ in pkgutil.iter_modules([interfaces_dir])})
-
-        display_names = []
-        for interface_name in interface_names:
-            try:
-                interface = self.import_module(f"interfaces.{interface_name}")
-                display_name = interface.get_display_name()
-                self.interface_names[display_name] = interface_name
-                display_names.append(display_name)
-            except Exception as e:
-                self.update_debug(f"Failed to load interface '{interface_name}': {e}")
-
-        self.interface_combobox['values'] = display_names
-
-    def display_default_content(self):
-        self.clear_main_window()
-        self.default_module.pack(fill='both', expand=True)
-
-    def display_module(self, event=None):
-        display_name = self.module_var.get()
-        selected_module = self.module_names.get(display_name, None)
-
-        if selected_module:
-            module_to_display = self.load_cached_module(selected_module)
-            self.clear_main_window()
-            self.main_app = module_to_display.ModuleApplication(self.main_window, None, self)
-            self.main_app.set_interface(self.current_interface)
-
-    def display_interface_settings(self, event=None):
-        display_name = self.interface_var.get()
-        selected_interface = self.interface_names.get(display_name, None)
-
-        if selected_interface:
-            interface_module = self.load_cached_interface(selected_interface)
-            if self.current_interface:
-                self.current_interface.pack_forget()
-            self.current_interface = interface_module.Interface(self.interface_wireframe, self)
-            self.current_interface.pack(fill='both', expand=True)
-            if self.main_app:
-                self.main_app.set_interface(self.current_interface)
-
-    def load_cached_module(self, module_name):
-        if module_name not in self.loaded_modules:
-            module_to_display = self.import_module(f"modules.{module_name}")
-            self.loaded_modules[module_name] = module_to_display
-            self.update_debug(f"Imported module: {module_name}")
+    def on_connect_toggle(self, btn):
+        if not self.comm.serial.is_open:
+            port_idx = self.port_dropdown.get_selected()
+            if port_idx == Gtk.INVALID_LIST_POSITION: return
+            port_name = self.port_dropdown.get_model().get_string(port_idx)
+            if self.comm.connect(port_name):
+                btn.set_label("Disconnect")
+                btn.add_css_class("destructive-action")
         else:
-            module_to_display = self.loaded_modules[module_name]
-            self.update_debug(f"Using cached module: {module_name}")
-        return module_to_display
+            self.comm.disconnect()
+            btn.set_label("Connect")
+            btn.remove_css_class("destructive-action")
 
-    def load_cached_interface(self, interface_name):
-        if interface_name not in self.loaded_interfaces:
-            interface_module = self.import_module(f"interfaces.{interface_name}")
-            self.loaded_interfaces[interface_name] = interface_module
-            self.update_debug(f"Imported interface: {interface_name}")
-        else:
-            interface_module = self.loaded_interfaces[interface_name]
-            self.update_debug(f"Using cached interface: {interface_name}")
-        return interface_module
+    def on_clear_clicked(self, btn):
+        btn.set_sensitive(False)
+        def run():
+            success = self.makita.clear_battery_errors()
+            GLib.idle_add(lambda: btn.set_sensitive(True))
+            if success:
+                self.run_async(self.do_read_live)
+        threading.Thread(target=run, daemon=True).start()
 
-    def import_module(self, module_path):
-        return importlib.import_module(module_path)
+    def do_read_static(self):
+        data = self.makita.read_static_info()
+        GLib.idle_add(self.update_ui_rows, data)
 
-    def clear_main_window(self):
-        for widget in self.main_window.winfo_children():
-            widget.pack_forget()
+    def do_read_live(self):
+        data = self.makita.read_live_data()
+        GLib.idle_add(self.update_ui_rows, data)
 
-    def update_debug(self, message):
-        if hasattr(self, 'debug_text'):  # Check if debug_text is initialized
-            self.debug_text.config(state='normal')
-            self.debug_text.insert('end', message + '\n')
-            self.debug_text.see('end')
-            self.debug_text.config(state='disabled')
-        else:
-            print("Debug:", message)  # Fallback if debug_text isn't initialized
+    def run_async(self, func):
+        threading.Thread(target=func, daemon=True).start()
+
+    def update_debug(self, text):
+        GLib.idle_add(self._append_debug, text)
+
+    def _append_debug(self, text):
+        end_iter = self.debug_buffer.get_end_iter()
+        self.debug_buffer.insert(end_iter, f"{text}\n")
+        mark = self.debug_buffer.create_mark(None, self.debug_buffer.get_end_iter(), False)
+        self.debug_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
 
 if __name__ == "__main__":
-    obi = OBI()
-    obi.mainloop()
+    app = ObiApp()
+    sys.exit(app.run(sys.argv))

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=OBI-1 Diagnostic
+Exec=obi-app
+Icon=org.obi.diagnostic
+Type=Application
+Terminal=false
+# This ensures it shows up in "Electronics" or "Utility"
+Categories=Electronics;Engineering;Utility;
+Comment=Makita LXT Battery Diagnostic Tool

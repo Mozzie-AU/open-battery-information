@@ -1,109 +1,94 @@
-import tkinter as tk
-from tkinter import ttk
-import serial
+# OBI-1 Diagnostic Tool
+# Copyright (C) 2026 Ray Ellison
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# Portions Derived from "Open Battery Information" 
+# Copyright (c) 2024 Martin Jansson (MIT License)import serial
+
 import serial.tools.list_ports
+import time
 
-INTERFACE_VERSION_CMD   = [0x01, 0x00, 0x03, 0x01]
-
-def get_display_name():
-    return "Arduino OBI"
-
-class Interface(tk.Frame):
-    def __init__(self, parent, obi_instance):
-        super().__init__(parent)
-        self.parent = parent
-        self.obi_instance = obi_instance
+class SerialInterface:
+    def __init__(self, baudrate=9600, debug_callback=None):
         self.serial = serial.Serial()
-        self.serial.timeout = 1
-        self.create_widgets()
+        self.serial.baudrate = baudrate
+        self.serial.timeout = 0.5
+        self.debug_callback = debug_callback
 
-    def create_widgets(self):
-        serial_label = tk.Label(self, text="Serial Port:")
-        serial_label.pack(pady=5)
-
-        ports = self.get_available_serial_ports()
-
-        self.conf_port = ttk.Combobox(self, values=ports, state="readonly")
-        self.conf_port.pack(pady=5)
-
-        self.connect_button = tk.Button(self, text="Connect", command=self.toggle_connection)
-        self.connect_button.pack(pady=10)
-        self.connect_button.config(width=20)
-
-
-        self.refresh_button = tk.Button(self, text="Refresh port list", command=self.refresh_serial_list)
-        self.refresh_button.pack(pady=10)
-        self.refresh_button.config(width=20)
-
-        self.version_label = tk.Label(self, anchor="w", width=20, text="Version:")
-        self.version_label.pack(pady=5)
-
-    def refresh_serial_list(self):
-        ports = self.get_available_serial_ports()
-        self.conf_port["values"] = ports
-
-
-    def get_available_serial_ports(self):
-        ports = [port.device for port in serial.tools.list_ports.comports()]
-        return ports
-
-    def toggle_connection(self):
-        if self.serial.is_open:
-            self.close_serial_port()
+    def log(self, message):
+        if self.debug_callback:
+            self.debug_callback(message)
         else:
-            self.open_serial_port()
+            print(f"[DEBUG] {message}")
 
-    def open_serial_port(self):
-        selected_port = self.conf_port.get()
-        if selected_port:
-            self.serial.port = selected_port
-            try:
-                self.serial.open()
-                self.update_version()
-                self.obi_instance.update_debug(f"Opened serial port: {selected_port}")
-                self.connect_button.config(text="Disconnect", command=self.close_serial_port)
-            except Exception as e:
-                self.serial.close()
-                self.obi_instance.update_debug(f"Error opening serial port {selected_port}: {e}")
+    def get_available_ports(self):
+        ports = serial.tools.list_ports.comports()
+        return [port.device for port in ports]
 
-    def close_serial_port(self):
+    def connect(self, port):
+        try:
+            self.serial.port = port
+            self.serial.open()
+            # Crucial: Wait for Arduino to finish rebooting after serial DTR toggle
+            time.sleep(2)
+            self.serial.reset_input_buffer()
+            self.log(f"Connected to {port} at {self.serial.baudrate} baud.")
+            return True
+        except Exception as e:
+            self.log(f"Connection failed: {e}")
+            return False
+
+    def disconnect(self):
         if self.serial.is_open:
             self.serial.close()
-            self.obi_instance.update_debug("Closed serial port")
-            self.connect_button.config(text="Connect", command=self.open_serial_port)
+            self.log("Disconnected.")
 
-    def get_version(self):
-        response = self.request(INTERFACE_VERSION_CMD, max_attempts=5)
-        version_string = '.'.join(str(byte) for byte in response[2:])
-    
-        return version_string
-    
-    def update_version(self):
-        self.version_label.config(text=f"Version: {self.get_version()}")
-
-    def request(self, request, max_attempts=2):
+    def send_command(self, cmd_list):
+        """Sends a binary packet list."""
         if not self.serial.is_open:
-            raise Exception(f"Serial port is not open.")
+            return False
+        try:
+            packet = bytes(cmd_list)
+            self.serial.write(packet)
+            self.log(f">> Sent Packet: {packet.hex(' ').upper()}")
+            return True
+        except Exception as e:
+            self.log(f"Write error: {e}")
+            return False
 
-        for attempt in range(1, max_attempts + 1):
-            self.obi_instance.update_debug(f">> {' '.join(f'{x:02X}' for x in request[3:])}")
-            try:
-                self.serial.reset_input_buffer()
-                self.serial.write(request)
-
-                response = self.serial.read(request[2] + 2)
-                self.obi_instance.update_debug(f"<< {' '.join(f'{x:02X}' for x in response[2:])}")
-                if request[2] == 0:
-                    return
-
-                if len(response) == request[2] + 2:
-                    
-                    if all(byte == 0xff for byte in response[2:]):
-                        raise ValueError("Invalid response: all bytes are 0xFF")
-                    
-                    return response
-
-            except Exception as e:
-                self.obi_instance.update_debug(f"Attempt {attempt}/{max_attempts} failed: {e}")
-        raise Exception(f"Failed to get a valid response after {max_attempts} attempts.")
-
+    def request(self, cmd_list, expected_len=1, wait_time=0.6):
+        """Sends binary packet and waits for raw byte response."""
+        if not self.serial.is_open:
+            return None
+        
+        try:
+            self.serial.reset_input_buffer()
+            packet = bytes(cmd_list)
+            self.serial.write(packet)
+            self.log(f">> Request: {packet.hex(' ').upper()}")
+            
+            # The Arduino needs time to talk to the battery (OneWire is slow)
+            time.sleep(wait_time)
+            
+            if self.serial.in_waiting > 0:
+                response = self.serial.read(self.serial.in_waiting)
+                self.log(f"<< Received {len(response)} bytes: {response.hex(' ').upper()}")
+                return response
+            
+            self.log("!! Device timed out (No response from battery/Arduino)")
+            return None
+        except Exception as e:
+            self.log(f"Serial Error: {e}")
+            return None
