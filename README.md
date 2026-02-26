@@ -1,7 +1,7 @@
 
 # OBI-1 Diagnostic (Flatpak Edition)
 
-**OBI-1** is an advanced, Linux-optimized diagnostic tool for lithium-ion battery packs, primarily targeting Makita LXT systems. This version is anevolution of the original project, rebuilt for recent Linux environments with enhanced safety monitoring.
+**OBI-1** is an advanced, Linux-optimized diagnostic tool for lithium-ion battery packs, primarily targeting Makita LXT systems. This version is an evolution of the original project, rebuilt for recent Linux environments with enhanced safety monitoring.
 
 <img src="OpenBatteryInformation/docs/images/OBI-Screenshot.png" width="50%" alt="OBI-1 Diagnostic Interface">
 

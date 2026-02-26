@@ -1,20 +1,16 @@
 #!/bin/bash
 
-# Define the rule file path
-RULE_FILE="/etc/udev/rules.d/99-obi-serial.rules"
+echo "🔧 Setting up permissions for OBI-1 Diagnostic Tool..."
 
-echo "--- OBI-1 Diagnostic Permission Setup ---"
+# 1. Add user to dialout group
+sudo usermod -a -G dialout $USER
 
-# Create the rule for both common types of USB serial chips
-# 0666 gives Read/Write access to Owner, Group, and Others
-cat <<EOF | sudo tee $RULE_FILE
-# Rule for OBI-1 Diagnostic: Allow user access to ttyUSB and ttyACM devices
-KERNEL=="ttyUSB*", MODE="0666"
-KERNEL=="ttyACM*", MODE="0666"
-EOF
+# 2. Create a udev rule for common USB-Serial adapters (CH340/CP2102)
+# This ensures the device is readable without needing a reboot sometimes
+echo 'KERNEL=="ttyUSB*", MODE="0666", GROUP="dialout"' | sudo tee /etc/udev/rules.d/99-obi-serial.rules
 
-echo "Applying new rules..."
+# 3. Reload udev rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
-echo "Success! Please unplug and replug your battery interface."
+echo "✅ Done! PLEASE LOG OUT AND LOG BACK IN for group changes to take effect."
