@@ -3,6 +3,8 @@
 
 **OBI-1** is an advanced, Linux-optimized diagnostic tool for lithium-ion battery packs, primarily targeting Makita LXT systems. This version is anevolution of the original project, rebuilt for recent Linux environments with enhanced safety monitoring.
 
+<img src="OpenBatteryInformation/docs/images/org.obi.diagnostic.png" width="50%" alt="OBI-1 Diagnostic Interface">
+
 ## ⚖️ License & Acknowledgments
 
 * **Current License**: This software is licensed under the **GNU GPLv3**.
@@ -84,5 +86,6 @@ This project aims to aid in battery repair and reduce waste by identifying false
 * To support the original author, consider [Buying them a coffee](https://www.buymeacoffee.com/mnhjansson).
 
 ---
+
 
 
